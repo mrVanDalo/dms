@@ -18,7 +18,7 @@ app = Flask(__name__)
 DATA_DIR = os.path.abspath(os.environ["DMSDATA"])
 SOURCE_DIR = os.readlink(os.path.join(DATA_DIR, "SOURCE_DIR"))
 IMPORTER = os.path.abspath(os.path.join(__file__, "..", "importer.sh"))
-DELAY = 45
+DELAY = 120
 FILE_QUEUE = queue.Queue()
 
 
@@ -28,6 +28,7 @@ class DirReaderThread(threading.Thread):
 
     def run(self):
         files = {}
+        print("watching %s" % SOURCE_DIR)
         while True:
             time.sleep(1)
             for filename in glob.glob(os.path.join(SOURCE_DIR, "*.pdf")):
@@ -47,11 +48,12 @@ class ImporterThread(threading.Thread):
 
 @app.before_first_request
 def boot_thread():
+    print("Starting Background threads")
     ImporterThread().start()
     DirReaderThread().start()
 
 
-def search(query):
+def search_documents(query):
     if not query:
         yield from (
             os.path.basename(x).rsplit(".", 1)[0]
@@ -71,13 +73,19 @@ def heading(s):
     return "<h1><a href='/'>" + cgi.html.escape(s, quote=True) + "</a></h1>"
 
 
-def search_box(q):
+def pagination(query, page):
+    left = """<a href='/?q=%s&page=%d'>left</a>""" % (cgi.html.escape(query, quote=True), page - 1)
+    right = """<a href='/?q=%s&page=%d'>right</a>""" % (cgi.html.escape(query, quote=True), page + 1)
+    return "".join([left, "<br>", right])
+
+
+def search_box(query):
     return (
             """
             <form id="search">
               <input class=input type="text" value="%s" name="q" placeholder="Search query" autofocus>
               <input class=button type="submit" value="Search">
-            </form>""" % cgi.html.escape(q, quote=True)
+            </form>""" % cgi.html.escape(query, quote=True)
     )
 
 
@@ -278,11 +286,18 @@ def download(name):
 @app.route("/")
 def root():
     query = request.args.get("q", "")
-    filter_to = set(search(query))
+    page = int(request.args.get("page", "0"))
+    found_documents = list(search_documents(query))
+    per_page: int = 15
+    if not found_documents:
+        filter_to = []
+    else:
+        filter_to = set([found_documents[i:i + per_page] for i in range(0, len(found_documents), per_page)][page])
     return render_page(
         [
             heading(("DMS - '%s'" % (query,)) if query else "DMS"),
             search_box(query),
+            pagination(query, page),
             list_of_directories(
                 lambda filename: '<a href="%s"><img title="%i pages" class="small %s" src="%s"></a>'
                                  % (

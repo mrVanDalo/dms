@@ -24,8 +24,9 @@ create_folder() {
 create_folder "$OUTPUT"
 create_folder "$ERROR_OUTPUT"
 
-mtime=$(stat -c '%Y' "$FILE")
-filename=$(date -d "@$mtime" -Iseconds | tr :+ __).pdf
+#time_part=$(stat -c '%Y' "$FILE")
+time_part=$(date +%s)
+filename=$(date -d "@$time_part" -Iseconds | tr :+ __).pdf
 filepath="$TEMP_FOLDER/$filename"
 
 cleanup() {
